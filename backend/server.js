@@ -3,12 +3,11 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const { MongoClient, ObjectId } = require('mongodb'); // Import ObjectId
+const { MongoClient } = require('mongodb');
 const { loadGameDataFromSheets, getGameData } = require('./gameData');
 
 const app = express();
 app.use(cors());
-// Increase the limit to allow for base64 image data
 app.use(express.json({ limit: '5mb' }));
 
 const server = http.createServer(app);
@@ -31,82 +30,124 @@ async function startServer() {
     } catch (e) { console.error("❌ Could not start server", e); }
 }
 
-io.on('connection', (socket) => console.log('A user connected:', socket.id));
+io.on('connection', (socket) => { console.log('A user connected:', socket.id); });
 
-// --- API Endpoints ---
-
-// Participant Login
-app.post('/api/teams/login', async (req, res) => {
+app.get('/api/teams/all', async (req, res) => {
     try {
-        const team = await teamsCollection.findOne({ teamCode: req.body.teamCode });
+        const teams = await teamsCollection.find({}).toArray();
+        res.status(200).json(teams);
+    } catch (error) { res.status(500).json({ message: "Error fetching teams." }); }
+});
+
+app.post('/api/teams/login', async (req, res) => {
+    const { teamCode } = req.body;
+    try {
+        const team = await teamsCollection.findOne({ teamCode });
         if (team) res.status(200).json(team);
         else res.status(404).json({ message: 'Team code not found.' });
     } catch (error) { res.status(500).json({ message: 'Server error.' }); }
 });
 
-// Get all teams for Admin Dashboard
-app.get('/api/teams/all', async (req, res) => {
-    try {
-        const teams = await teamsCollection.find({}).toArray();
-        res.status(200).json(teams);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetching teams.' });
-    }
-});
-
-// Participant uploads a selfie
 app.post('/api/teams/upload-selfie', async (req, res) => {
     const { teamCode, imageSrc } = req.body;
-    if (!teamCode || !imageSrc) {
-        return res.status(400).json({ message: 'Team code and image are required.' });
-    }
     try {
         const result = await teamsCollection.findOneAndUpdate(
-            { teamCode: teamCode },
+            { teamCode },
             { $set: { "selfie.url": imageSrc, "selfie.isVerified": false } },
+            { returnDocument: 'after' }
+        );
+        if (result) {
+            io.emit('newSelfieForVerification', result);
+            res.status(200).json({ message: 'Selfie uploaded.' });
+        } else {
+            res.status(404).json({ message: 'Team not found.' });
+        }
+    } catch (error) { res.status(500).json({ message: 'Server error.' }); }
+});
+
+app.post('/api/teams/verify-selfie', async (req, res) => {
+    const { teamCode, isApproved } = req.body;
+    try {
+        const update = isApproved ? 
+            { $set: { "selfie.isVerified": true, startTime: new Date() } } :
+            { $set: { "selfie.url": "REJECTED", "selfie.isVerified": false } };
+
+        const result = await teamsCollection.findOneAndUpdate(
+            { teamCode },
+            update,
             { returnDocument: 'after' }
         );
         
         if (result) {
-            // Real-time magic: Notify all connected admins
-            io.emit('newSelfieForVerification', result);
-            res.status(200).json({ message: 'Selfie uploaded successfully.' });
-        } else {
-            res.status(404).json({ message: 'Team not found.' });
-        }
-    } catch (error) {
-        res.status(500).json({ message: 'Server error uploading selfie.' });
-    }
-});
-
-// Admin verifies a selfie
-app.post('/api/teams/verify-selfie', async (req, res) => {
-    const { teamCode, isApproved } = req.body;
-    try {
-        const updateData = isApproved
-            ? { $set: { "selfie.isVerified": true, startTime: new Date() } } // Start timer on approval
-            : { $set: { "selfie.url": "", "selfie.isVerified": false } }; // Clear selfie on rejection
-
-        const result = await teamsCollection.findOneAndUpdate(
-            { teamCode: teamCode },
-            updateData,
-            { returnDocument: 'after' }
-        );
-
-        if (result) {
-            // Real-time magic: Notify admins and the specific participant
-            io.emit('selfieVerified', result); // Notify all admins to remove from queue
-            if(isApproved) {
-                io.emit(`selfieApproved_${teamCode}`); // Notify only the specific team
+            if (isApproved) {
+                io.emit(`selfieApproved_${teamCode}`);
             }
+            io.emit('teamUpdate', result);
             res.status(200).json({ message: 'Verification status updated.' });
         } else {
             res.status(404).json({ message: 'Team not found.' });
         }
+    } catch (error) { res.status(500).json({ message: 'Server error.' }); }
+});
+
+app.post('/api/teams/scan-qr', async (req, res) => {
+    const { teamCode, qrIdentifier } = req.body;
+    const { locations, routes } = getGameData();
+
+    try {
+        const team = await teamsCollection.findOne({ teamCode });
+        if (!team) return res.status(404).json({ message: "Team not found." });
+        if (!team.selfie.isVerified) return res.status(403).json({ message: "Selfie not verified yet." });
+
+        const teamRoute = routes[team.routeId];
+        if (!teamRoute) return res.status(404).json({ message: "Route not found for team." });
+
+        const currentIndex = team.currentLocationIndex || 0;
+        const nextLocationId = teamRoute.locations[currentIndex];
+        const nextLocationDetails = locations[nextLocationId];
+
+        if (qrIdentifier === nextLocationDetails.qrIdentifier) {
+            const newLocationIndex = currentIndex + 1;
+            const isFinished = newLocationIndex >= teamRoute.locations.length;
+
+            let updateData = {
+                $set: { currentLocationIndex: newLocationIndex },
+                $push: { riddlesSolved: { location: nextLocationDetails.name, riddle: team.currentRiddle || "First Location" } }
+            };
+            
+            let responseData = {};
+
+            if (isFinished) {
+                updateData.$set.endTime = new Date();
+                responseData = { finished: true, message: "Congratulations! You have completed the hunt!" };
+            } else {
+                const newRiddleLocationId = teamRoute.locations[newLocationIndex];
+                const newRiddleLocation = locations[newRiddleLocationId];
+                const riddles = newRiddleLocation.riddles;
+                const newRiddle = riddles[Math.floor(Math.random() * riddles.length)];
+                
+                updateData.$set.currentRiddle = newRiddle;
+                responseData = { correct: true, newRiddle, locationName: newRiddleLocation.name };
+            }
+
+            const updatedTeam = await teamsCollection.findOneAndUpdate(
+                { teamCode },
+                updateData,
+                { returnDocument: 'after' }
+            );
+            io.emit('teamUpdate', updatedTeam);
+            res.status(200).json(responseData);
+
+        } else {
+            res.status(400).json({ correct: false, message: "Wrong location! Keep searching." });
+        }
+
     } catch (error) {
-        res.status(500).json({ message: 'Server error during verification.' });
+        console.error("QR Scan Error:", error);
+        res.status(500).json({ message: "Server error during QR scan." });
     }
 });
 
-
 startServer();
+
+
