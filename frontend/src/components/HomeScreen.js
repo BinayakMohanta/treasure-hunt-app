@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 
-const HomeScreen = ({ onLogin }) => {
+const HomeScreen = ({ onLogin, setView }) => {
     const [teamCode, setTeamCode] = useState('');
     const [error, setError] = useState('');
     const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000';
 
     const handleLogin = async () => {
-        setError('');
         if (!teamCode) {
             setError('Please enter a team code.');
             return;
@@ -21,41 +20,35 @@ const HomeScreen = ({ onLogin }) => {
             if (response.ok) {
                 onLogin(data);
             } else {
-                setError(data.message || 'Invalid team code.');
+                setError(data.message);
             }
         } catch (err) {
             setError('Could not connect to the server.');
         }
     };
-    
-    // Function to handle Enter key press
-    const handleKeyPress = (event) => {
-        if (event.key === 'Enter') {
-            handleLogin();
-        }
-    };
 
     return (
-        <div>
-            <h1>Treasure Hunt</h1>
-            
-            <div className="login-section">
-                <h2>Participant Login</h2>
+        <div className="home-container">
+            <div className="title-container">
+                <h1 className="main-title">Treasure Hunt</h1>
+            </div>
+            <div className="login-container">
                 <input
                     type="text"
-                    placeholder="Enter Team Code"
+                    className="team-code-input"
+                    placeholder="ENTER TEAM CODE"
                     value={teamCode}
                     onChange={(e) => setTeamCode(e.target.value.toUpperCase())}
-                    onKeyPress={handleKeyPress}
                 />
-                <button onClick={handleLogin}>Join Hunt</button>
-                {error && <p style={{ color: '#ffb3b3', marginTop: '1rem' }}>{error}</p>}
-            </div>
+                <button className="login-button" onClick={handleLogin}>JOIN HUNT</button>
+                {error && <p style={{ color: 'red', marginTop: '1rem' }}>{error}</p>}
 
-            {/* The Admin Login button is here for styling, but is not functional yet */}
-            <button className="admin-button">Admin Login</button>
+                {/* This button now correctly calls setView to switch to the admin panel */}
+                <button className="admin-button" onClick={() => setView('admin')}>ADMIN LOGIN</button>
+            </div>
         </div>
     );
 };
 
 export default HomeScreen;
+
