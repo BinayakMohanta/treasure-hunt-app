@@ -1,5 +1,8 @@
 const { GoogleSpreadsheet } = require('google-spreadsheet');
-let gameLocations = {};
+let gameData = {
+    locations: {},
+    routes: {}
+};
 
 async function loadGameDataFromSheets() {
     try {
@@ -10,28 +13,53 @@ async function loadGameDataFromSheets() {
         });
         await doc.loadInfo();
 
+        // Load Locations
         const locationsSheet = doc.sheetsByTitle['Locations'];
-        const riddlesSheet = doc.sheetsByTitle['Riddles'];
         const locationRows = await locationsSheet.getRows();
-        const riddleRows = await riddlesSheet.getRows();
-
-        const locationsMap = new Map();
+        const locationsMap = {};
         locationRows.forEach(row => {
-            locationsMap.set(row.locationID, {
-                id: row.locationID, name: row.locationName,
-                qrIdentifier: row.qrIdentifier, riddles: [],
-            });
+            locationsMap[row.locationID] = {
+                id: row.locationID,
+                name: row.locationName,
+                qrIdentifier: row.qrIdentifier,
+                riddles: [],
+            };
         });
 
+        // Load Riddles and add them to locations
+        const riddlesSheet = doc.sheetsByTitle['Riddles'];
+        const riddleRows = await riddlesSheet.getRows();
         riddleRows.forEach(row => {
-            if (locationsMap.has(row.locationID)) {
-                locationsMap.get(row.locationID).riddles.push(row.riddleText);
+            if (locationsMap[row.locationID]) {
+                locationsMap[row.locationID].riddles.push(row.riddleText);
             }
         });
 
-        gameLocations = Object.fromEntries(locationsMap);
+        // Load Routes
+        const routesSheet = doc.sheetsByTitle['Routes'];
+        const routeRows = await routesSheet.getRows();
+        const routesMap = {};
+        routeRows.forEach(row => {
+            const locationsInRoute = [];
+            // Dynamically read all location columns
+            for (let i = 1; row[`location_${i}`]; i++) {
+                locationsInRoute.push(row[`location_${i}`]);
+            }
+            routesMap[row.routeName] = {
+                name: row.routeName,
+                locations: locationsInRoute
+            };
+        });
+
+        gameData = { locations: locationsMap, routes: routesMap };
         console.log('✅ Game data loaded successfully from Google Sheets!');
-    } catch (error) { console.error('❌ Error loading game data:', error); }
+    } catch (error) {
+        console.error('❌ Error loading game data from Google Sheets:', error);
+    }
 }
 
-module.exports = { loadGameDataFromSheets };
+// THIS IS THE CORRECTED PART
+const getGameData = () => gameData;
+
+// We must export BOTH functions
+module.exports = { loadGameDataFromSheets, getGameData };
