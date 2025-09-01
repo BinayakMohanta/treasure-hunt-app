@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import { QrReader } from 'react-qr-reader';
+// CORRECTED IMPORT: Using QrScanner now
+import QrScanner from 'react-qr-scanner'; 
 import io from 'socket.io-client';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000';
@@ -28,10 +29,10 @@ const GameScreen = ({ teamData }) => {
         }
     }, [teamData.endTime, teamData.startTime]);
 
-    const handleScanResult = async (result) => {
-        if (result) {
+    const handleScanResult = async (data) => {
+        if (data && data.text) {
             setIsScanning(false);
-            const qrIdentifier = result.text;
+            const qrIdentifier = data.text;
             
             try {
                 const response = await fetch(`${API_URL}/api/teams/scan-qr`, {
@@ -40,23 +41,29 @@ const GameScreen = ({ teamData }) => {
                     body: JSON.stringify({ teamCode: teamData.teamCode, qrIdentifier }),
                 });
 
-                const data = await response.json();
+                const responseData = await response.json();
 
                 if (response.ok) {
                     setErrorMessage('');
-                    if (data.finished) {
+                    if (responseData.finished) {
                         setIsFinished(true);
                     } else {
                         setPastRiddles(prev => [...prev, { riddle: currentRiddle, location: "Previous Location" }]);
-                        setCurrentRiddle(data.newRiddle);
+                        setCurrentRiddle(responseData.newRiddle);
                     }
                 } else {
-                    setErrorMessage(data.message || "An error occurred.");
+                    setErrorMessage(responseData.message || "An error occurred.");
                 }
             } catch (error) {
                 setErrorMessage("Failed to connect to the server.");
             }
         }
+    };
+    
+    const handleScanError = (err) => {
+        console.error(err);
+        setErrorMessage("Could not access the camera. Please check permissions.");
+        setIsScanning(false);
     };
 
     if (isFinished) {
@@ -76,14 +83,13 @@ const GameScreen = ({ teamData }) => {
         return (
             <div>
                 <h2>Scan QR Code</h2>
-                <QrReader
-                    onResult={(result, error) => {
-                        if (!!result) {
-                            handleScanResult(result);
-                        }
-                    }}
-                    constraints={{ facingMode: 'environment' }}
+                {/* CORRECTED COMPONENT: Using QrScanner with the right props */}
+                <QrScanner
+                    delay={300}
+                    onError={handleScanError}
+                    onScan={handleScanResult}
                     style={{ width: '100%' }}
+                    constraints={{ video: { facingMode: 'environment' } }}
                 />
                 <button onClick={() => setIsScanning(false)} className="admin-button" style={{marginTop: '1rem'}}>Cancel</button>
             </div>
@@ -121,6 +127,7 @@ const GameScreen = ({ teamData }) => {
 };
 
 // --- SELFIE VERIFICATION COMPONENT ---
+// This component remains unchanged.
 const SelfieScreen = ({ teamData }) => {
     const [imageSrc, setImageSrc] = useState(null);
     const [statusMessage, setStatusMessage] = useState('Please take a team selfie for verification.');
@@ -170,6 +177,7 @@ const SelfieScreen = ({ teamData }) => {
 };
 
 // --- MAIN PARTICIPANT VIEW COMPONENT ---
+// This component remains unchanged.
 const ParticipantView = ({ teamData }) => {
     const [isVerified, setIsVerified] = useState(teamData.selfie?.isVerified || false);
 
