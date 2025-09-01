@@ -27,6 +27,16 @@ const HomeScreen = ({ onLogin, setView }) => {
         }
     };
 
+    const handleAdminLogin = () => {
+        const password = prompt("Please enter the admin password:");
+        // You can change this password to whatever you like.
+        if (password === "admin123") {
+            setView('admin');
+        } else if (password !== null) { // Check if the user clicked "Cancel"
+            alert("Incorrect password.");
+        }
+    };
+
     return (
         <div className="home-container">
             <div className="title-container">
@@ -42,9 +52,7 @@ const HomeScreen = ({ onLogin, setView }) => {
                 />
                 <button className="login-button" onClick={handleLogin}>JOIN HUNT</button>
                 {error && <p style={{ color: 'red', marginTop: '1rem' }}>{error}</p>}
-
-                {/* This button now correctly calls setView to switch to the admin panel */}
-                <button className="admin-button" onClick={() => setView('admin')}>ADMIN LOGIN</button>
+                <button className="admin-button" onClick={handleAdminLogin}>ADMIN LOGIN</button>
             </div>
         </div>
     );
