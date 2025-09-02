@@ -32,6 +32,7 @@ async function startServer() {
 
 io.on('connection', (socket) => { console.log('A user connected:', socket.id); });
 
+// API endpoint to get all teams for the admin view
 app.get('/api/teams/all', async (req, res) => {
     try {
         const teams = await teamsCollection.find({}).toArray();
@@ -39,6 +40,7 @@ app.get('/api/teams/all', async (req, res) => {
     } catch (error) { res.status(500).json({ message: "Error fetching teams." }); }
 });
 
+// API endpoint for participant login
 app.post('/api/teams/login', async (req, res) => {
     const { teamCode } = req.body;
     try {
@@ -48,6 +50,7 @@ app.post('/api/teams/login', async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Server error.' }); }
 });
 
+// API endpoint for uploading selfies
 app.post('/api/teams/upload-selfie', async (req, res) => {
     const { teamCode, imageSrc } = req.body;
     try {
@@ -65,6 +68,7 @@ app.post('/api/teams/upload-selfie', async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Server error.' }); }
 });
 
+// API endpoint for admin to verify selfies
 app.post('/api/teams/verify-selfie', async (req, res) => {
     const { teamCode, isApproved } = req.body;
     try {
@@ -90,6 +94,7 @@ app.post('/api/teams/verify-selfie', async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Server error.' }); }
 });
 
+// API endpoint for handling QR code scans
 app.post('/api/teams/scan-qr', async (req, res) => {
     const { teamCode, qrIdentifier } = req.body;
     const { locations, routes } = getGameData();
@@ -112,7 +117,7 @@ app.post('/api/teams/scan-qr', async (req, res) => {
 
             let updateData = {
                 $set: { currentLocationIndex: newLocationIndex },
-                $push: { riddlesSolved: { location: nextLocationDetails.name, riddle: team.currentRiddle || "First Location" } }
+                $push: { riddlesSolved: { location: nextLocationDetails.name, riddle: team.currentRiddle || "First Location Scan" } }
             };
             
             let responseData = {};
@@ -123,8 +128,18 @@ app.post('/api/teams/scan-qr', async (req, res) => {
             } else {
                 const newRiddleLocationId = teamRoute.locations[newLocationIndex];
                 const newRiddleLocation = locations[newRiddleLocationId];
+                
+                // *** NEW LOGIC TO HANDLE LOCATIONS WITH NO RIDDLES ***
                 const riddles = newRiddleLocation.riddles;
-                const newRiddle = riddles[Math.floor(Math.random() * riddles.length)];
+                let newRiddle;
+
+                if (riddles && riddles.length > 0) {
+                    // If riddles exist, pick a random one
+                    newRiddle = riddles[Math.floor(Math.random() * riddles.length)];
+                } else {
+                    // If no riddles exist (e.g., for LOC49, LOC50, LOC51), provide a generic message
+                    newRiddle = `You've reached ${newRiddleLocation.name}. Proceed to your next checkpoint!`;
+                }
                 
                 updateData.$set.currentRiddle = newRiddle;
                 responseData = { correct: true, newRiddle, locationName: newRiddleLocation.name };
@@ -149,5 +164,3 @@ app.post('/api/teams/scan-qr', async (req, res) => {
 });
 
 startServer();
-
-
