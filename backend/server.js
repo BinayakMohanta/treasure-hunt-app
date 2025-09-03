@@ -32,7 +32,6 @@ async function startServer() {
 
 io.on('connection', (socket) => { console.log('A user connected:', socket.id); });
 
-// API endpoint to get all teams for the admin view
 app.get('/api/teams/all', async (req, res) => {
     try {
         const teams = await teamsCollection.find({}).toArray();
@@ -40,7 +39,6 @@ app.get('/api/teams/all', async (req, res) => {
     } catch (error) { res.status(500).json({ message: "Error fetching teams." }); }
 });
 
-// API endpoint for participant login
 app.post('/api/teams/login', async (req, res) => {
     const { teamCode } = req.body;
     try {
@@ -50,10 +48,15 @@ app.post('/api/teams/login', async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Server error.' }); }
 });
 
-// API endpoint for uploading selfies
 app.post('/api/teams/upload-selfie', async (req, res) => {
     const { teamCode, imageSrc } = req.body;
     try {
+        // *** NEW LOGIC: Check if a selfie is already pending ***
+        const existingTeam = await teamsCollection.findOne({ teamCode });
+        if (existingTeam.selfie && existingTeam.selfie.url && !existingTeam.selfie.isVerified) {
+            return res.status(429).json({ message: 'A selfie is already pending verification.' });
+        }
+
         const result = await teamsCollection.findOneAndUpdate(
             { teamCode },
             { $set: { "selfie.url": imageSrc, "selfie.isVerified": false } },
@@ -68,13 +71,17 @@ app.post('/api/teams/upload-selfie', async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Server error.' }); }
 });
 
-// API endpoint for admin to verify selfies
 app.post('/api/teams/verify-selfie', async (req, res) => {
     const { teamCode, isApproved } = req.body;
     try {
+        const { routes } = getGameData();
+        const team = await teamsCollection.findOne({ teamCode });
+        const teamRoute = routes[team.routeId];
+        const totalLocations = teamRoute ? teamRoute.locations.length : 0;
+
         const update = isApproved ? 
-            { $set: { "selfie.isVerified": true, startTime: new Date() } } :
-            { $set: { "selfie.url": "REJECTED", "selfie.isVerified": false } };
+            { $set: { "selfie.isVerified": true, startTime: new Date(), totalLocations: totalLocations } } :
+            { $set: { "selfie.url": "", "selfie.isVerified": false } }; // Clear URL on rejection
 
         const result = await teamsCollection.findOneAndUpdate(
             { teamCode },
@@ -85,6 +92,8 @@ app.post('/api/teams/verify-selfie', async (req, res) => {
         if (result) {
             if (isApproved) {
                 io.emit(`selfieApproved_${teamCode}`);
+            } else {
+                io.emit(`selfieRejected_${teamCode}`);
             }
             io.emit('teamUpdate', result);
             res.status(200).json({ message: 'Verification status updated.' });
@@ -94,7 +103,6 @@ app.post('/api/teams/verify-selfie', async (req, res) => {
     } catch (error) { res.status(500).json({ message: 'Server error.' }); }
 });
 
-// API endpoint for handling QR code scans
 app.post('/api/teams/scan-qr', async (req, res) => {
     const { teamCode, qrIdentifier } = req.body;
     const { locations, routes } = getGameData();
@@ -129,20 +137,17 @@ app.post('/api/teams/scan-qr', async (req, res) => {
                 const newRiddleLocationId = teamRoute.locations[newLocationIndex];
                 const newRiddleLocation = locations[newRiddleLocationId];
                 
-                // *** NEW LOGIC TO HANDLE LOCATIONS WITH NO RIDDLES ***
                 const riddles = newRiddleLocation.riddles;
                 let newRiddle;
 
                 if (riddles && riddles.length > 0) {
-                    // If riddles exist, pick a random one
                     newRiddle = riddles[Math.floor(Math.random() * riddles.length)];
                 } else {
-                    // If no riddles exist (e.g., for LOC49, LOC50, LOC51), provide a generic message
                     newRiddle = `You've reached ${newRiddleLocation.name}. Proceed to your next checkpoint!`;
                 }
                 
                 updateData.$set.currentRiddle = newRiddle;
-                responseData = { correct: true, newRiddle, locationName: newRiddleLocation.name };
+                responseData = { correct: true, newRiddle };
             }
 
             const updatedTeam = await teamsCollection.findOneAndUpdate(
