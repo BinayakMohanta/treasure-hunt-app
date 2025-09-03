@@ -5,40 +5,56 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000';
 const socket = io(API_URL);
 
 const AdminView = () => {
-    const [teams, setTeams] = useState([]);
+    // *** NEW STATE MANAGEMENT: Separate state for the master list and the queue ***
+    const [allTeams, setAllTeams] = useState([]);
     const [verificationQueue, setVerificationQueue] = useState([]);
 
     useEffect(() => {
-        const fetchTeams = async () => {
+        // Fetch the initial state of all teams when the component loads
+        const fetchInitialTeams = async () => {
             try {
                 const response = await fetch(`${API_URL}/api/teams/all`);
-                const allTeams = await response.json();
-                setTeams(allTeams);
-                setVerificationQueue(allTeams.filter(t => t.selfie && t.selfie.url && !t.selfie.isVerified && t.selfie.url !== 'REJECTED'));
+                const teamsData = await response.json();
+                setAllTeams(teamsData);
+                // Populate the queue initially with any teams that are already pending
+                setVerificationQueue(teamsData.filter(t => t.selfie && t.selfie.url && !t.selfie.isVerified));
             } catch (error) {
                 console.error("Failed to fetch teams:", error);
             }
         };
-        fetchTeams();
+        fetchInitialTeams();
 
-        socket.on('newSelfieForVerification', (teamWithSelfie) => {
-            setVerificationQueue(prev => {
-                if (prev.find(t => t.teamCode === teamWithSelfie.teamCode)) return prev;
-                return [...prev, teamWithSelfie];
+        // Listen for new selfies submitted for verification
+        const handleNewSelfie = (teamWithSelfie) => {
+            // Add to the queue only if not already present
+            setVerificationQueue(prevQueue => {
+                const isAlreadyInQueue = prevQueue.some(t => t.teamCode === teamWithSelfie.teamCode);
+                return isAlreadyInQueue ? prevQueue : [...prevQueue, teamWithSelfie];
             });
-        });
-
-        socket.on('teamUpdate', (updatedTeam) => {
-            setTeams(prevTeams => 
+            // Also update the master list of teams
+            setAllTeams(prevTeams => 
                 prevTeams.map(team => 
-                    team.teamCode === updatedTeam.teamCode ? { ...team, ...updatedTeam } : team
+                    team.teamCode === teamWithSelfie.teamCode ? teamWithSelfie : team
                 )
             );
-        });
+        };
+        
+        // Listen for general updates to any team (e.g., after verification or QR scan)
+        const handleTeamUpdate = (updatedTeam) => {
+            setAllTeams(prevTeams => 
+                prevTeams.map(team => 
+                    team.teamCode === updatedTeam.teamCode ? updatedTeam : team
+                )
+            );
+        };
 
+        socket.on('newSelfieForVerification', handleNewSelfie);
+        socket.on('teamUpdate', handleTeamUpdate);
+
+        // Clean up listeners when the component unmounts
         return () => {
-            socket.off('newSelfieForVerification');
-            socket.off('teamUpdate');
+            socket.off('newSelfieForVerification', handleNewSelfie);
+            socket.off('teamUpdate', handleTeamUpdate);
         };
     }, []);
 
@@ -49,7 +65,8 @@ const AdminView = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ teamCode, isApproved }),
             });
-            setVerificationQueue(prev => prev.filter(t => t.teamCode !== teamCode));
+            // Remove the verified team from the queue
+            setVerificationQueue(prevQueue => prevQueue.filter(t => t.teamCode !== teamCode));
         } catch (error) {
             console.error("Verification error:", error);
         }
@@ -76,7 +93,7 @@ const AdminView = () => {
             </div>
 
             <div>
-                <h2>All Teams Status ({teams.length})</h2>
+                <h2>All Teams Status ({allTeams.length})</h2>
                 <table style={{width: '100%', textAlign: 'left', borderCollapse: 'collapse'}}>
                     <thead>
                         <tr>
@@ -86,20 +103,17 @@ const AdminView = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {teams.map(team => {
-                            const totalLocations = team.totalLocations || (team.routeId && getGameData().routes[team.routeId] ? getGameData().routes[team.routeId].locations.length : '?');
-                            return (
-                                <tr key={team.teamCode}>
-                                    <td style={{padding: '8px', borderBottom: '1px solid #654321'}}>{team.teamName || team.teamCode}</td>
-                                    <td style={{padding: '8px', borderBottom: '1px solid #654321'}}>
-                                        {team.endTime ? 'Finished' : (team.selfie.isVerified ? 'In Progress' : (team.selfie.url ? (team.selfie.url === 'REJECTED' ? 'Rejected' : 'Pending') : 'Not Started'))}
-                                    </td>
-                                    <td style={{padding: '8px', borderBottom: '1px solid #654321'}}>
-                                        {team.selfie.isVerified ? `${team.currentLocationIndex || 0} / ${totalLocations}` : 'N/A'}
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                        {allTeams.map(team => (
+                            <tr key={team.teamCode}>
+                                <td style={{padding: '8px', borderBottom: '1px solid #654321'}}>{team.teamName || team.teamCode}</td>
+                                <td style={{padding: '8px', borderBottom: '1.5px solid #654321'}}>
+                                    {team.endTime ? 'Finished' : (team.selfie.isVerified ? 'In Progress' : (team.selfie.url ? 'Pending Verification' : 'Not Started'))}
+                                </td>
+                                <td style={{padding: '8px', borderBottom: '1px solid #654321'}}>
+                                    {team.selfie.isVerified ? `${team.currentLocationIndex || 0} / ${team.totalLocations || '?'}` : 'N/A'}
+                                </td>
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
             </div>
@@ -107,14 +121,5 @@ const AdminView = () => {
     );
 };
 
-// Dummy getGameData for AdminView until we can share it from a better place
-const getGameData = () => ({
-    routes: {
-        // This is a simplified placeholder. The actual data is on the server.
-        // The server will send the totalLocations with the teamUpdate event.
-    }
-});
-
 export default AdminView;
-
 
