@@ -73,14 +73,22 @@ app.post('/api/teams/upload-selfie', async (req, res) => {
 app.post('/api/teams/verify-selfie', async (req, res) => {
     const { teamCode, isApproved } = req.body;
     try {
-        const { routes } = getGameData();
         const team = await teamsCollection.findOne({ teamCode });
+        const { routes } = getGameData();
         const teamRoute = routes[team.routeId];
         const totalLocations = teamRoute ? teamRoute.locations.length : 0;
-
-        const update = isApproved ? 
-            { $set: { "selfie.isVerified": true, startTime: new Date(), totalLocations: totalLocations } } :
-            { $set: { "selfie.url": "", "selfie.isVerified": false } };
+        
+        let update = {};
+        if (isApproved) {
+            update = { $set: { "selfie.isVerified": true, "selfie.url": "" } };
+            // Only set startTime on the very first approval
+            if (!team.startTime) {
+                update.$set.startTime = new Date();
+                update.$set.totalLocations = totalLocations;
+            }
+        } else {
+            update = { $set: { "selfie.url": "", "selfie.isVerified": false } }; // Clear URL on rejection
+        }
 
         const result = await teamsCollection.findOneAndUpdate(
             { teamCode },
@@ -90,9 +98,9 @@ app.post('/api/teams/verify-selfie', async (req, res) => {
         
         if (result) {
             if (isApproved) {
-                io.emit(`selfieApproved_${teamCode}`);
+                io.emit(`selfieApproved_${teamCode}`, result);
             } else {
-                io.emit(`selfieRejected_${teamCode}`);
+                io.emit(`selfieRejected_${teamCode}`, result);
             }
             io.emit('teamUpdate', result);
             res.status(200).json({ message: 'Verification status updated.' });
@@ -109,7 +117,7 @@ app.post('/api/teams/scan-qr', async (req, res) => {
     try {
         const team = await teamsCollection.findOne({ teamCode });
         if (!team) return res.status(404).json({ message: "Team not found." });
-        if (!team.selfie.isVerified) return res.status(403).json({ message: "Selfie not verified yet." });
+        if (!team.selfie.isVerified) return res.status(403).json({ message: "Selfie not verified yet. Please submit a new selfie." });
 
         const teamRoute = routes[team.routeId];
         if (!teamRoute) return res.status(404).json({ message: "Route not found for team." });
@@ -122,9 +130,13 @@ app.post('/api/teams/scan-qr', async (req, res) => {
             const newLocationIndex = currentIndex + 1;
             const isFinished = newLocationIndex >= teamRoute.locations.length;
             const isAtPenultimateLocation = newLocationIndex === teamRoute.locations.length - 1;
+            const isLongRoute = teamRoute.locations.length > 4;
 
             let updateData = {
-                $set: { currentLocationIndex: newLocationIndex },
+                $set: { 
+                    currentLocationIndex: newLocationIndex,
+                    "selfie.isVerified": false // *** LOCK THE SCANNER FOR THE NEXT ROUND ***
+                },
                 $push: { riddlesSolved: { location: currentLocationDetails.name, riddle: team.currentRiddle || "First Location Scan" } }
             };
             
@@ -132,9 +144,10 @@ app.post('/api/teams/scan-qr', async (req, res) => {
 
             if (isFinished) {
                 updateData.$set.endTime = new Date();
+                // On finish, verification is not needed
+                updateData.$set["selfie.isVerified"] = true; 
                 responseData = { finished: true, message: "Congratulations! You have completed the hunt!" };
-            } else if (isAtPenultimateLocation) {
-                // *** NEW LOGIC FOR THE FINAL CLUE ***
+            } else if (isAtPenultimateLocation && isLongRoute) {
                 const finalClue = "You're almost there! Go back to TP to finish the hunt!";
                 updateData.$set.currentRiddle = finalClue;
                 responseData = { correct: true, newRiddle: finalClue };
@@ -174,4 +187,3 @@ app.post('/api/teams/scan-qr', async (req, res) => {
 });
 
 startServer();
-
