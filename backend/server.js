@@ -51,7 +51,6 @@ app.post('/api/teams/login', async (req, res) => {
 app.post('/api/teams/upload-selfie', async (req, res) => {
     const { teamCode, imageSrc } = req.body;
     try {
-        // *** NEW LOGIC: Check if a selfie is already pending ***
         const existingTeam = await teamsCollection.findOne({ teamCode });
         if (existingTeam.selfie && existingTeam.selfie.url && !existingTeam.selfie.isVerified) {
             return res.status(429).json({ message: 'A selfie is already pending verification.' });
@@ -81,7 +80,7 @@ app.post('/api/teams/verify-selfie', async (req, res) => {
 
         const update = isApproved ? 
             { $set: { "selfie.isVerified": true, startTime: new Date(), totalLocations: totalLocations } } :
-            { $set: { "selfie.url": "", "selfie.isVerified": false } }; // Clear URL on rejection
+            { $set: { "selfie.url": "", "selfie.isVerified": false } };
 
         const result = await teamsCollection.findOneAndUpdate(
             { teamCode },
@@ -116,16 +115,17 @@ app.post('/api/teams/scan-qr', async (req, res) => {
         if (!teamRoute) return res.status(404).json({ message: "Route not found for team." });
 
         const currentIndex = team.currentLocationIndex || 0;
-        const nextLocationId = teamRoute.locations[currentIndex];
-        const nextLocationDetails = locations[nextLocationId];
+        const currentLocationId = teamRoute.locations[currentIndex];
+        const currentLocationDetails = locations[currentLocationId];
 
-        if (qrIdentifier === nextLocationDetails.qrIdentifier) {
+        if (qrIdentifier === currentLocationDetails.qrIdentifier) {
             const newLocationIndex = currentIndex + 1;
             const isFinished = newLocationIndex >= teamRoute.locations.length;
+            const isAtPenultimateLocation = newLocationIndex === teamRoute.locations.length - 1;
 
             let updateData = {
                 $set: { currentLocationIndex: newLocationIndex },
-                $push: { riddlesSolved: { location: nextLocationDetails.name, riddle: team.currentRiddle || "First Location Scan" } }
+                $push: { riddlesSolved: { location: currentLocationDetails.name, riddle: team.currentRiddle || "First Location Scan" } }
             };
             
             let responseData = {};
@@ -133,17 +133,22 @@ app.post('/api/teams/scan-qr', async (req, res) => {
             if (isFinished) {
                 updateData.$set.endTime = new Date();
                 responseData = { finished: true, message: "Congratulations! You have completed the hunt!" };
+            } else if (isAtPenultimateLocation) {
+                // *** NEW LOGIC FOR THE FINAL CLUE ***
+                const finalClue = "You're almost there! Go back to TP to finish the hunt!";
+                updateData.$set.currentRiddle = finalClue;
+                responseData = { correct: true, newRiddle: finalClue };
             } else {
-                const newRiddleLocationId = teamRoute.locations[newLocationIndex];
-                const newRiddleLocation = locations[newRiddleLocationId];
+                const nextRiddleLocationId = teamRoute.locations[newLocationIndex];
+                const nextRiddleLocation = locations[nextRiddleLocationId];
                 
-                const riddles = newRiddleLocation.riddles;
+                const riddles = nextRiddleLocation.riddles;
                 let newRiddle;
 
                 if (riddles && riddles.length > 0) {
                     newRiddle = riddles[Math.floor(Math.random() * riddles.length)];
                 } else {
-                    newRiddle = `You've reached ${newRiddleLocation.name}. Proceed to your next checkpoint!`;
+                    newRiddle = `You've reached ${nextRiddleLocation.name}. Proceed to your next checkpoint!`;
                 }
                 
                 updateData.$set.currentRiddle = newRiddle;
@@ -169,3 +174,4 @@ app.post('/api/teams/scan-qr', async (req, res) => {
 });
 
 startServer();
+
