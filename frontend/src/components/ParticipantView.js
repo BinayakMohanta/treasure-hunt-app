@@ -1,101 +1,48 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
-// CORRECTED IMPORT: Using QrScanner now
-import QrScanner from 'react-qr-scanner'; 
+import QrScanner from 'react-qr-scanner';
 import io from 'socket.io-client';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000';
 const socket = io(API_URL);
 
-// --- GAME SCREEN COMPONENT ---
-const GameScreen = ({ teamData }) => {
+// --- COMPONENT FOR DISPLAYING RIDDLES AND SCANNING ---
+const RiddleScreen = ({ teamData, onScanResult }) => {
     const [isScanning, setIsScanning] = useState(false);
-    const [currentRiddle, setCurrentRiddle] = useState(teamData.currentRiddle || "Your first riddle is waiting... Scan the starting QR code!");
-    const [pastRiddles, setPastRiddles] = useState(teamData.riddlesSolved || []);
     const [activeTab, setActiveTab] = useState('current');
-    const [isFinished, setIsFinished] = useState(!!teamData.endTime);
-    const [finalTime, setFinalTime] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
 
-    useEffect(() => {
-        if (teamData.endTime && teamData.startTime) {
-            const startTime = new Date(teamData.startTime);
-            const endTime = new Date(teamData.endTime);
-            const diff = endTime.getTime() - startTime.getTime();
-            const hours = Math.floor(diff / 3600000);
-            const minutes = Math.floor((diff % 3600000) / 60000);
-            const seconds = Math.floor((diff % 60000) / 1000);
-            setFinalTime(`${hours}h ${minutes}m ${seconds}s`);
-        }
-    }, [teamData.endTime, teamData.startTime]);
-
-    const handleScanResult = async (data) => {
-        if (data && data.text) {
+    const handleScan = (data) => {
+        if (data) {
             setIsScanning(false);
-            const qrIdentifier = data.text;
-            
-            try {
-                const response = await fetch(`${API_URL}/api/teams/scan-qr`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ teamCode: teamData.teamCode, qrIdentifier }),
-                });
-
-                const responseData = await response.json();
-
-                if (response.ok) {
-                    setErrorMessage('');
-                    if (responseData.finished) {
-                        setIsFinished(true);
-                    } else {
-                        setPastRiddles(prev => [...prev, { riddle: currentRiddle, location: "Previous Location" }]);
-                        setCurrentRiddle(responseData.newRiddle);
-                    }
-                } else {
-                    setErrorMessage(responseData.message || "An error occurred.");
-                }
-            } catch (error) {
-                setErrorMessage("Failed to connect to the server.");
-            }
+            onScanResult(data.text);
         }
     };
-    
+
     const handleScanError = (err) => {
         console.error(err);
-        setErrorMessage("Could not access the camera. Please check permissions.");
+        setErrorMessage("Could not access camera. Please check permissions.");
         setIsScanning(false);
     };
 
-    if (isFinished) {
-        return (
-            <div className="game-screen">
-                <h2>Congratulations, {teamData.teamName}!</h2>
-                <p>You have completed the Treasure Hunt!</p>
-                <div className="riddle-card" style={{backgroundColor: '#C3B091', color: 'white', padding: '1.5rem', borderRadius: '10px', marginTop: '1.5rem'}}>
-                    <h3>Final Time</h3>
-                    <p>{finalTime}</p>
-                </div>
-            </div>
-        );
-    }
-    
     if (isScanning) {
         return (
             <div>
                 <h2>Scan QR Code</h2>
-                {/* CORRECTED COMPONENT: Using QrScanner with the right props */}
-                <QrScanner
-                    delay={300}
-                    onError={handleScanError}
-                    onScan={handleScanResult}
-                    style={{ width: '100%' }}
-                    constraints={{ video: { facingMode: 'environment' } }}
-                />
+                <div style={{ width: '100%', maxWidth: '400px', margin: 'auto', border: '2px solid #C3B091', borderRadius: '10px', overflow: 'hidden' }}>
+                    <QrScanner
+                        delay={300}
+                        onError={handleScanError}
+                        onScan={handleScan}
+                        style={{ width: '100%' }}
+                        constraints={{ video: { facingMode: "environment" } }}
+                    />
+                </div>
                 <button onClick={() => setIsScanning(false)} className="admin-button" style={{marginTop: '1rem'}}>Cancel</button>
             </div>
         );
     }
-
+    
     return (
         <div className="game-screen" style={{color: '#EAE0C8'}}>
             <h2>The Hunt is On!</h2>
@@ -106,13 +53,13 @@ const GameScreen = ({ teamData }) => {
             </div>
             {activeTab === 'current' ? (
                 <div className="riddle-card" style={{backgroundColor: '#C3B091', color: 'white', padding: '1.5rem', borderRadius: '10px'}}>
-                    <p>{currentRiddle}</p>
+                    <p>{teamData.currentRiddle || "Your first riddle is waiting... Scan the starting QR code!"}</p>
                 </div>
             ) : (
                 <div className="riddle-card" style={{backgroundColor: '#654321', color: 'white', padding: '1.5rem', borderRadius: '10px', textAlign: 'left'}}>
-                    {pastRiddles.length > 0 ? (
+                    {teamData.riddlesSolved && teamData.riddlesSolved.length > 0 ? (
                         <ul style={{listStyle: 'none', padding: 0}}>
-                            {pastRiddles.map((item, index) => (
+                            {teamData.riddlesSolved.map((item, index) => (
                                 <li key={index} style={{marginBottom: '0.5rem'}}><strong>{item.location}:</strong> {item.riddle}</li>
                             ))}
                         </ul>
@@ -126,11 +73,11 @@ const GameScreen = ({ teamData }) => {
     );
 };
 
-// --- SELFIE VERIFICATION COMPONENT ---
-// This component remains unchanged.
-const SelfieScreen = ({ teamData }) => {
+// --- COMPONENT FOR CAPTURING AND UPLOADING SELFIES ---
+const SelfieScreen = ({ teamData, onUpload }) => {
     const [imageSrc, setImageSrc] = useState(null);
     const [statusMessage, setStatusMessage] = useState('Please take a team selfie for verification.');
+    const [isUploading, setIsUploading] = useState(false);
     const webcamRef = useRef(null);
 
     const capture = useCallback(() => {
@@ -141,17 +88,26 @@ const SelfieScreen = ({ teamData }) => {
     const retakePhoto = () => setImageSrc(null);
 
     const handleUpload = async () => {
-        if (!imageSrc) return;
+        if (!imageSrc || isUploading) return;
+        setIsUploading(true);
         setStatusMessage('Uploading...');
         try {
-            await fetch(`${API_URL}/api/teams/upload-selfie`, {
+            const response = await fetch(`${API_URL}/api/teams/upload-selfie`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ teamCode: teamData.teamCode, imageSrc }),
             });
-            setStatusMessage('Selfie submitted! Waiting for admin approval...');
+            if (response.ok) {
+                setStatusMessage('Selfie submitted! Waiting for admin approval...');
+                onUpload(); // Notify parent component
+            } else {
+                 const data = await response.json();
+                 setStatusMessage(data.message || 'Upload failed. Please try again.');
+                 setIsUploading(false);
+            }
         } catch (error) {
             setStatusMessage('Upload failed. Please try again.');
+            setIsUploading(false);
         }
     };
 
@@ -165,8 +121,8 @@ const SelfieScreen = ({ teamData }) => {
             <div style={{ marginTop: '1.5rem' }}>
                 {imageSrc ? (
                     <>
-                        <button onClick={handleUpload}>Upload for Verification</button>
-                        <button onClick={retakePhoto} className="admin-button">Retake Photo</button>
+                        <button onClick={handleUpload} disabled={isUploading}>{isUploading ? 'Uploading...' : 'Upload for Verification'}</button>
+                        <button onClick={retakePhoto} className="admin-button" disabled={isUploading}>Retake Photo</button>
                     </>
                 ) : (
                     <button onClick={capture}>Capture Photo</button>
@@ -176,25 +132,86 @@ const SelfieScreen = ({ teamData }) => {
     );
 };
 
-// --- MAIN PARTICIPANT VIEW COMPONENT ---
-// This component remains unchanged.
-const ParticipantView = ({ teamData }) => {
-    const [isVerified, setIsVerified] = useState(teamData.selfie?.isVerified || false);
 
+// --- MAIN CONTROLLER COMPONENT FOR PARTICIPANTS ---
+const ParticipantView = ({ teamData: initialTeamData }) => {
+    const [teamData, setTeamData] = useState(initialTeamData);
+    const [isFinished, setIsFinished] = useState(!!initialTeamData.endTime);
+    const [finalTime, setFinalTime] = useState('');
+    
+    // Listen for real-time updates from the server
     useEffect(() => {
-        socket.on(`selfieApproved_${teamData.teamCode}`, () => {
-            setIsVerified(true);
-        });
+        const handleSelfieApproved = (updatedTeamFromServer) => {
+            setTeamData(updatedTeamFromServer);
+        };
+        const handleSelfieRejected = () => {
+            alert("Your selfie was rejected by the admin. Please retake and upload a new one.");
+            // Reset the view to allow for a new selfie
+            setTeamData(prev => ({...prev, selfie: { url: "", isVerified: false }}));
+        };
+
+        socket.on(`selfieApproved_${teamData.teamCode}`, handleSelfieApproved);
+        socket.on(`selfieRejected_${teamData.teamCode}`, handleSelfieRejected);
+        
         return () => {
-            socket.off(`selfieApproved_${teamData.teamCode}`);
+            socket.off(`selfieApproved_${teamData.teamCode}`, handleSelfieApproved);
+            socket.off(`selfieRejected_${teamData.teamCode}`, handleSelfieRejected);
         };
     }, [teamData.teamCode]);
 
-    if (isVerified) {
-        return <GameScreen teamData={teamData} />;
+    const handleScanResult = async (qrIdentifier) => {
+        try {
+            const response = await fetch(`${API_URL}/api/teams/scan-qr`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamCode: teamData.teamCode, qrIdentifier }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                if (data.finished) {
+                    setIsFinished(true);
+                    const startTime = new Date(teamData.startTime);
+                    const endTime = new Date();
+                    const diff = endTime.getTime() - startTime.getTime();
+                    const hours = Math.floor(diff / 3600000);
+                    const minutes = Math.floor((diff % 3600000) / 60000);
+                    const seconds = Math.floor((diff % 60000) / 1000);
+                    setFinalTime(`${hours}h ${minutes}m ${seconds}s`);
+                } else {
+                    // Update team data with new riddle and lock status
+                    setTeamData(prev => ({...prev, currentRiddle: data.newRiddle, selfie: {...prev.selfie, isVerified: false}}));
+                }
+            } else {
+                alert(data.message || "An error occurred.");
+            }
+        } catch (error) {
+            alert("Failed to connect to the server.");
+        }
+    };
+    
+    // Display the final completion screen
+    if (isFinished) {
+        return (
+            <div className="game-screen">
+                <h2>Congratulations, {teamData.teamName}!</h2>
+                <p>You have completed the Treasure Hunt!</p>
+                <div className="riddle-card" style={{backgroundColor: '#C3B091', color: 'white', padding: '1.5rem', borderRadius: '10px', marginTop: '1.srem'}}>
+                    <h3>Final Time</h3>
+                    <p>{finalTime}</p>
+                </div>
+            </div>
+        );
+    }
+    
+    // Decide which screen to show based on selfie verification status
+    if (teamData.selfie && teamData.selfie.isVerified) {
+        return <RiddleScreen teamData={teamData} onScanResult={handleScanResult} />;
     } else {
-        return <SelfieScreen teamData={teamData} />;
+        return <SelfieScreen teamData={teamData} onUpload={() => setTeamData(prev => ({...prev, selfie: {...prev.selfie, url: "PENDING"}}))}/>;
     }
 };
 
 export default ParticipantView;
+
