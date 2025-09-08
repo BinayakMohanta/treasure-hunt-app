@@ -99,7 +99,7 @@ const SelfieScreen = ({ teamData, onUpload }) => {
             });
             if (response.ok) {
                 setStatusMessage('Selfie submitted! Waiting for admin approval...');
-                onUpload(); // Notify parent component
+                onUpload(); 
             } else {
                  const data = await response.json();
                  setStatusMessage(data.message || 'Upload failed. Please try again.');
@@ -181,7 +181,12 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
                     setFinalTime(`${hours}h ${minutes}m ${seconds}s`);
                 } else {
                     // Update team data with new riddle and lock status
-                    setTeamData(prev => ({...prev, currentRiddle: data.newRiddle, selfie: {...prev.selfie, isVerified: false}}));
+                    setTeamData(prev => ({
+                        ...prev, 
+                        currentRiddle: data.newRiddle, 
+                        selfie: {...prev.selfie, isVerified: false},
+                        riddlesSolved: [...(prev.riddlesSolved || []), { location: "Previous Location", riddle: prev.currentRiddle }]
+                    }));
                 }
             } else {
                 alert(data.message || "An error occurred.");
@@ -190,28 +195,3 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
             alert("Failed to connect to the server.");
         }
     };
-    
-    // Display the final completion screen
-    if (isFinished) {
-        return (
-            <div className="game-screen">
-                <h2>Congratulations, {teamData.teamName}!</h2>
-                <p>You have completed the Treasure Hunt!</p>
-                <div className="riddle-card" style={{backgroundColor: '#C3B091', color: 'white', padding: '1.5rem', borderRadius: '10px', marginTop: '1.srem'}}>
-                    <h3>Final Time</h3>
-                    <p>{finalTime}</p>
-                </div>
-            </div>
-        );
-    }
-    
-    // Decide which screen to show based on selfie verification status
-    if (teamData.selfie && teamData.selfie.isVerified) {
-        return <RiddleScreen teamData={teamData} onScanResult={handleScanResult} />;
-    } else {
-        return <SelfieScreen teamData={teamData} onUpload={() => setTeamData(prev => ({...prev, selfie: {...prev.selfie, url: "PENDING"}}))}/>;
-    }
-};
-
-export default ParticipantView;
-
