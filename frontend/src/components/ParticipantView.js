@@ -184,7 +184,9 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
                     setTeamData(prev => ({
                         ...prev, 
                         currentRiddle: data.newRiddle, 
-                        selfie: {...prev.selfie, isVerified: false},
+                        // Safely update the selfie object
+                        selfie: {...(prev.selfie || {}), isVerified: false},
+                        // Safely update the riddlesSolved array
                         riddlesSolved: [...(prev.riddlesSolved || []), { location: "Previous Location", riddle: prev.currentRiddle }]
                     }));
                 }
@@ -195,3 +197,29 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
             alert("Failed to connect to the server.");
         }
     };
+    
+    // Display the final completion screen
+    if (isFinished) {
+        return (
+            <div className="game-screen">
+                <h2>Congratulations, {teamData.teamName}!</h2>
+                <p>You have completed the Treasure Hunt!</p>
+                <div className="riddle-card" style={{backgroundColor: '#C3B091', color: 'white', padding: '1.5rem', borderRadius: '10px', marginTop: '1.srem'}}>
+                    <h3>Final Time</h3>
+                    <p>{finalTime}</p>
+                </div>
+            </div>
+        );
+    }
+    
+    // This is the main logic gate. It now safely checks if the selfie object exists before trying to read `isVerified`.
+    // This prevents the app from crashing.
+    if (teamData && teamData.selfie && teamData.selfie.isVerified) {
+        return <RiddleScreen teamData={teamData} onScanResult={handleScanResult} />;
+    } else {
+        return <SelfieScreen teamData={teamData} onUpload={() => setTeamData(prev => ({...prev, selfie: {...(prev.selfie || {}), url: "PENDING"}}))}/>;
+    }
+};
+
+export default ParticipantView;
+
