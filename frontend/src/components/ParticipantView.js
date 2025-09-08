@@ -231,6 +231,6 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
         return <SelfieScreen teamData={teamData} onUploadSuccess={() => setTeamData(prev => ({...prev, selfie: {...(prev.selfie || {}), url: "PENDING"}}))}/>;
     }
 };
-//
+
 export default ParticipantView;
 
