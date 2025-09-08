@@ -81,13 +81,12 @@ app.post('/api/teams/verify-selfie', async (req, res) => {
         let update = {};
         if (isApproved) {
             update = { $set: { "selfie.isVerified": true, "selfie.url": "" } };
-            // Only set startTime on the very first approval
             if (!team.startTime) {
                 update.$set.startTime = new Date();
                 update.$set.totalLocations = totalLocations;
             }
         } else {
-            update = { $set: { "selfie.url": "", "selfie.isVerified": false } }; // Clear URL on rejection
+            update = { $set: { "selfie.url": "", "selfie.isVerified": false } }; 
         }
 
         const result = await teamsCollection.findOneAndUpdate(
@@ -129,43 +128,51 @@ app.post('/api/teams/scan-qr', async (req, res) => {
         if (qrIdentifier === currentLocationDetails.qrIdentifier) {
             const newLocationIndex = currentIndex + 1;
             const isFinished = newLocationIndex >= teamRoute.locations.length;
-            const isAtPenultimateLocation = newLocationIndex === teamRoute.locations.length - 1;
-            const isLongRoute = teamRoute.locations.length > 4;
-
+            
             let updateData = {
                 $set: { 
                     currentLocationIndex: newLocationIndex,
-                    "selfie.isVerified": false // *** LOCK THE SCANNER FOR THE NEXT ROUND ***
                 },
                 $push: { riddlesSolved: { location: currentLocationDetails.name, riddle: team.currentRiddle || "First Location Scan" } }
             };
             
+            // *** NEW LOGIC: ONLY REQUIRE A SELFIE FOR THE FIRST 6 CHECKPOINTS (indices 0 to 5) ***
+            // `currentIndex` is the location they JUST scanned. If they scanned location 4 (the 5th checkpoint),
+            // we need to lock the scanner for the 6th selfie (at location 5).
+            if (currentIndex < 5) {
+                updateData.$set["selfie.isVerified"] = false; 
+            }
+
             let responseData = {};
 
             if (isFinished) {
                 updateData.$set.endTime = new Date();
-                // On finish, verification is not needed
                 updateData.$set["selfie.isVerified"] = true; 
                 responseData = { finished: true, message: "Congratulations! You have completed the hunt!" };
-            } else if (isAtPenultimateLocation && isLongRoute) {
-                const finalClue = "You're almost there! Go back to TP to finish the hunt!";
-                updateData.$set.currentRiddle = finalClue;
-                responseData = { correct: true, newRiddle: finalClue };
             } else {
-                const nextRiddleLocationId = teamRoute.locations[newLocationIndex];
-                const nextRiddleLocation = locations[nextRiddleLocationId];
-                
-                const riddles = nextRiddleLocation.riddles;
-                let newRiddle;
+                const isAtPenultimateLocation = newLocationIndex === teamRoute.locations.length - 1;
+                const isLongRoute = teamRoute.locations.length > 4;
 
-                if (riddles && riddles.length > 0) {
-                    newRiddle = riddles[Math.floor(Math.random() * riddles.length)];
+                if (isAtPenultimateLocation && isLongRoute) {
+                    const finalClue = "You're almost there! Go back to TP to finish the hunt!";
+                    updateData.$set.currentRiddle = finalClue;
+                    responseData = { correct: true, newRiddle: finalClue };
                 } else {
-                    newRiddle = `You've reached ${nextRiddleLocation.name}. Proceed to your next checkpoint!`;
+                    const nextRiddleLocationId = teamRoute.locations[newLocationIndex];
+                    const nextRiddleLocation = locations[nextRiddleLocationId];
+                    
+                    const riddles = nextRiddleLocation.riddles;
+                    let newRiddle;
+
+                    if (riddles && riddles.length > 0) {
+                        newRiddle = riddles[Math.floor(Math.random() * riddles.length)];
+                    } else {
+                        newRiddle = `You've reached ${nextRiddleLocation.name}. Proceed to your next checkpoint!`;
+                    }
+                    
+                    updateData.$set.currentRiddle = newRiddle;
+                    responseData = { correct: true, newRiddle };
                 }
-                
-                updateData.$set.currentRiddle = newRiddle;
-                responseData = { correct: true, newRiddle };
             }
 
             const updatedTeam = await teamsCollection.findOneAndUpdate(
@@ -187,3 +194,4 @@ app.post('/api/teams/scan-qr', async (req, res) => {
 });
 
 startServer();
+
