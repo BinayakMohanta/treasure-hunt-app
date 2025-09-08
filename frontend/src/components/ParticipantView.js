@@ -148,29 +148,38 @@ const SelfieScreen = ({ teamData, onUploadSuccess }) => {
     );
 };
 
+
 // --- MAIN CONTROLLER COMPONENT FOR PARTICIPANTS ---
 const ParticipantView = ({ teamData: initialTeamData }) => {
     const [teamData, setTeamData] = useState(initialTeamData);
     
+    // This is the single, robust listener for all real-time updates.
     useEffect(() => {
+        // This function handles any update pushed from the server
         const handleTeamUpdate = (updatedTeamFromServer) => {
+            // Only update if the message is for this team
             if(updatedTeamFromServer.teamCode === initialTeamData.teamCode) {
                 setTeamData(updatedTeamFromServer);
             }
         };
+        
+        // Listen for the general 'teamUpdate' event
         socket.on('teamUpdate', handleTeamUpdate);
 
+        // This handles the specific case where a selfie is rejected
         const handleSelfieRejected = () => {
              alert("Your selfie was rejected by the admin. Please retake and upload a new one.");
+             // Manually reset the selfie part of the state to allow a retake
              setTeamData(prev => ({...prev, selfie: { url: "", isVerified: false }}));
         };
         socket.on(`selfieRejected_${initialTeamData.teamCode}`, handleSelfieRejected);
         
+        // Cleanup function to prevent memory leaks
         return () => {
             socket.off('teamUpdate', handleTeamUpdate);
             socket.off(`selfieRejected_${initialTeamData.teamCode}`, handleSelfieRejected);
         };
-    }, [initialTeamData.teamCode]);
+    }, [initialTeamData.teamCode]); // Only run this effect once per team
 
     const handleScanResult = async (qrIdentifier) => {
         try {
@@ -179,15 +188,20 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ teamCode: teamData.teamCode, qrIdentifier }),
             });
+
             if (!response.ok) {
                  const data = await response.json();
                  alert(data.message || "An error occurred.");
             }
+            // No need to manually update state here, the server will push an update via socket.io
         } catch (error) {
             alert("Failed to connect to the server.");
         }
     };
     
+    // --- RENDER LOGIC ---
+
+    // Display the final completion screen
     if (teamData.endTime) {
         const startTime = new Date(teamData.startTime);
         const endTime = new Date(teamData.endTime);
@@ -210,6 +224,7 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
         );
     }
     
+    // This is the main logic gate. It checks the live teamData state.
     if (teamData.selfie && teamData.selfie.isVerified) {
         return <RiddleScreen teamData={teamData} onScanResult={handleScanResult} />;
     } else {
@@ -218,3 +233,4 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
 };
 
 export default ParticipantView;
+
