@@ -2,21 +2,21 @@ import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000';
-const socket = io(API_URL);
+const socket = io(API__URL);
 
 const AdminView = () => {
-    // *** NEW STATE MANAGEMENT: Separate state for the master list and the queue ***
+    // Separate state for the master list and the real-time queue for stability
     const [allTeams, setAllTeams] = useState([]);
     const [verificationQueue, setVerificationQueue] = useState([]);
 
     useEffect(() => {
-        // Fetch the initial state of all teams when the component loads
+        // 1. Fetch the initial state of all teams when the dashboard loads
         const fetchInitialTeams = async () => {
             try {
                 const response = await fetch(`${API_URL}/api/teams/all`);
                 const teamsData = await response.json();
                 setAllTeams(teamsData);
-                // Populate the queue initially with any teams that are already pending
+                // Initially populate the queue with any teams that are already pending verification
                 setVerificationQueue(teamsData.filter(t => t.selfie && t.selfie.url && !t.selfie.isVerified));
             } catch (error) {
                 console.error("Failed to fetch teams:", error);
@@ -24,14 +24,14 @@ const AdminView = () => {
         };
         fetchInitialTeams();
 
-        // Listen for new selfies submitted for verification
+        // 2. Set up listener for NEW selfies arriving in real-time
         const handleNewSelfie = (teamWithSelfie) => {
-            // Add to the queue only if not already present
+            // Add the new selfie to the queue without disrupting the page
             setVerificationQueue(prevQueue => {
                 const isAlreadyInQueue = prevQueue.some(t => t.teamCode === teamWithSelfie.teamCode);
                 return isAlreadyInQueue ? prevQueue : [...prevQueue, teamWithSelfie];
             });
-            // Also update the master list of teams
+            // Also, update the main list of teams with the new selfie data
             setAllTeams(prevTeams => 
                 prevTeams.map(team => 
                     team.teamCode === teamWithSelfie.teamCode ? teamWithSelfie : team
@@ -39,7 +39,7 @@ const AdminView = () => {
             );
         };
         
-        // Listen for general updates to any team (e.g., after verification or QR scan)
+        // 3. Set up a general listener for ANY team update (e.g., progress change, verification status)
         const handleTeamUpdate = (updatedTeam) => {
             setAllTeams(prevTeams => 
                 prevTeams.map(team => 
@@ -51,7 +51,7 @@ const AdminView = () => {
         socket.on('newSelfieForVerification', handleNewSelfie);
         socket.on('teamUpdate', handleTeamUpdate);
 
-        // Clean up listeners when the component unmounts
+        // Cleanup function to prevent memory leaks
         return () => {
             socket.off('newSelfieForVerification', handleNewSelfie);
             socket.off('teamUpdate', handleTeamUpdate);
@@ -65,7 +65,7 @@ const AdminView = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ teamCode, isApproved }),
             });
-            // Remove the verified team from the queue
+            // Once action is taken, remove the team from the queue immediately for a snappy UI
             setVerificationQueue(prevQueue => prevQueue.filter(t => t.teamCode !== teamCode));
         } catch (error) {
             console.error("Verification error:", error);
