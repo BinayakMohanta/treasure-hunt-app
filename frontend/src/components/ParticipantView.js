@@ -74,7 +74,7 @@ const RiddleScreen = ({ teamData, onScanResult }) => {
 };
 
 // --- COMPONENT FOR CAPTURING AND UPLOADING SELFIES ---
-const SelfieScreen = ({ teamData, onUpload }) => {
+const SelfieScreen = ({ teamData, onUploadSuccess }) => {
     const [imageSrc, setImageSrc] = useState(null);
     const [statusMessage, setStatusMessage] = useState('Please take a team selfie for verification.');
     const [isUploading, setIsUploading] = useState(false);
@@ -99,7 +99,7 @@ const SelfieScreen = ({ teamData, onUpload }) => {
             });
             if (response.ok) {
                 setStatusMessage('Selfie submitted! Waiting for admin approval...');
-                onUpload(); 
+                onUploadSuccess(); 
             } else {
                  const data = await response.json();
                  setStatusMessage(data.message || 'Upload failed. Please try again.');
@@ -136,28 +136,34 @@ const SelfieScreen = ({ teamData, onUpload }) => {
 // --- MAIN CONTROLLER COMPONENT FOR PARTICIPANTS ---
 const ParticipantView = ({ teamData: initialTeamData }) => {
     const [teamData, setTeamData] = useState(initialTeamData);
-    const [isFinished, setIsFinished] = useState(!!initialTeamData.endTime);
-    const [finalTime, setFinalTime] = useState('');
     
-    // Listen for real-time updates from the server
+    // This is the single, robust listener for all real-time updates.
     useEffect(() => {
-        const handleSelfieApproved = (updatedTeamFromServer) => {
-            setTeamData(updatedTeamFromServer);
+        // This function handles any update pushed from the server
+        const handleTeamUpdate = (updatedTeamFromServer) => {
+            // Only update if the message is for this team
+            if(updatedTeamFromServer.teamCode === initialTeamData.teamCode) {
+                setTeamData(updatedTeamFromServer);
+            }
         };
-        const handleSelfieRejected = () => {
-            alert("Your selfie was rejected by the admin. Please retake and upload a new one.");
-            // Reset the view to allow for a new selfie
-            setTeamData(prev => ({...prev, selfie: { url: "", isVerified: false }}));
-        };
-
-        socket.on(`selfieApproved_${teamData.teamCode}`, handleSelfieApproved);
-        socket.on(`selfieRejected_${teamData.teamCode}`, handleSelfieRejected);
         
-        return () => {
-            socket.off(`selfieApproved_${teamData.teamCode}`, handleSelfieApproved);
-            socket.off(`selfieRejected_${teamData.teamCode}`, handleSelfieRejected);
+        // Listen for the general 'teamUpdate' event
+        socket.on('teamUpdate', handleTeamUpdate);
+
+        // This handles the specific case where a selfie is rejected
+        const handleSelfieRejected = () => {
+             alert("Your selfie was rejected by the admin. Please retake and upload a new one.");
+             // Manually reset the selfie part of the state to allow a retake
+             setTeamData(prev => ({...prev, selfie: { url: "", isVerified: false }}));
         };
-    }, [teamData.teamCode]);
+        socket.on(`selfieRejected_${initialTeamData.teamCode}`, handleSelfieRejected);
+        
+        // Cleanup function to prevent memory leaks
+        return () => {
+            socket.off('teamUpdate', handleTeamUpdate);
+            socket.off(`selfieRejected_${initialTeamData.teamCode}`, handleSelfieRejected);
+        };
+    }, [initialTeamData.teamCode]); // Only run this effect once per team
 
     const handleScanResult = async (qrIdentifier) => {
         try {
@@ -167,44 +173,33 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
                 body: JSON.stringify({ teamCode: teamData.teamCode, qrIdentifier }),
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                if (data.finished) {
-                    setIsFinished(true);
-                    const startTime = new Date(teamData.startTime);
-                    const endTime = new Date();
-                    const diff = endTime.getTime() - startTime.getTime();
-                    const hours = Math.floor(diff / 3600000);
-                    const minutes = Math.floor((diff % 3600000) / 60000);
-                    const seconds = Math.floor((diff % 60000) / 1000);
-                    setFinalTime(`${hours}h ${minutes}m ${seconds}s`);
-                } else {
-                    // Update team data with new riddle and lock status
-                    setTeamData(prev => ({
-                        ...prev, 
-                        currentRiddle: data.newRiddle, 
-                        // Safely update the selfie object
-                        selfie: {...(prev.selfie || {}), isVerified: false},
-                        // Safely update the riddlesSolved array
-                        riddlesSolved: [...(prev.riddlesSolved || []), { location: "Previous Location", riddle: prev.currentRiddle }]
-                    }));
-                }
-            } else {
-                alert(data.message || "An error occurred.");
+            if (!response.ok) {
+                 const data = await response.json();
+                 alert(data.message || "An error occurred.");
             }
+            // No need to manually update state here, the server will push an update via socket.io
         } catch (error) {
             alert("Failed to connect to the server.");
         }
     };
     
+    // --- RENDER LOGIC ---
+
     // Display the final completion screen
-    if (isFinished) {
+    if (teamData.endTime) {
+        const startTime = new Date(teamData.startTime);
+        const endTime = new Date(teamData.endTime);
+        const diff = endTime.getTime() - startTime.getTime();
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        const finalTime = `${hours}h ${minutes}m ${seconds}s`;
+
         return (
             <div className="game-screen">
                 <h2>Congratulations, {teamData.teamName}!</h2>
                 <p>You have completed the Treasure Hunt!</p>
-                <div className="riddle-card" style={{backgroundColor: '#C3B091', color: 'white', padding: '1.5rem', borderRadius: '10px', marginTop: '1.srem'}}>
+                <div className="riddle-card" style={{backgroundColor: '#C3B091', color: 'white', padding: '1.5rem', borderRadius: '10px', marginTop: '1.5rem'}}>
                     <h3>Final Time</h3>
                     <p>{finalTime}</p>
                 </div>
@@ -212,12 +207,11 @@ const ParticipantView = ({ teamData: initialTeamData }) => {
         );
     }
     
-    // This is the main logic gate. It now safely checks if the selfie object exists before trying to read `isVerified`.
-    // This prevents the app from crashing.
-    if (teamData && teamData.selfie && teamData.selfie.isVerified) {
+    // This is the main logic gate. It checks the live teamData state.
+    if (teamData.selfie && teamData.selfie.isVerified) {
         return <RiddleScreen teamData={teamData} onScanResult={handleScanResult} />;
     } else {
-        return <SelfieScreen teamData={teamData} onUpload={() => setTeamData(prev => ({...prev, selfie: {...(prev.selfie || {}), url: "PENDING"}}))}/>;
+        return <SelfieScreen teamData={teamData} onUploadSuccess={() => setTeamData(prev => ({...prev, selfie: {...(prev.selfie || {}), url: "PENDING"}}))}/>;
     }
 };
 
