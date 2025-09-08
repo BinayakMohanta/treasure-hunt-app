@@ -1,15 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Roboto:wght@400;500&display=swap');
+/* --- GOOGLE FONT IMPORT --- */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Roboto:wght@400;500;700&display=swap');
 
+/* --- THEME VARIABLES --- */
 :root {
     --background-dark: #2c1a2b;
-    --text-primary: #EAE0C8; /* A beige/off-white for text */
-    --accent-gold: #C3B091;   /* Khaki/Gold for borders and highlights */
+    --text-primary: #EAE0C8;
+    --accent-gold: #C3B091;
     --accent-dark-brown: #654321;
     --button-purple: #800080;
     --font-title: 'Cinzel Decorative', cursive;
     --font-body: 'Roboto', sans-serif;
+    --error-red: #ff6b6b;
 }
 
+/* --- GENERAL BODY STYLES --- */
 body {
     background-color: var(--background-dark);
     color: var(--text-primary);
@@ -23,6 +27,7 @@ body {
     box-sizing: border-box;
 }
 
+/* --- MAIN APP CONTAINER --- */
 .app-container {
     width: 100%;
     max-width: 500px;
@@ -32,145 +37,72 @@ body {
     box-shadow: 0 4px 25px rgba(0, 0, 0, 0.4);
     padding: 2rem;
     text-align: center;
+    overflow: hidden; /* Prevents content from spilling out */
 }
 
-/* --- HOME SCREEN SPECIFIC STYLES --- */
-.home-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+/* --- FADE-IN ANIMATION --- */
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-.title-container {
-    margin-bottom: 2rem;
-}
+/* --- HOME SCREEN --- */
+.home-container { display: flex; flex-direction: column; align-items: center; }
+.main-title { font-family: var(--font-title); font-size: 3rem; color: var(--text-primary); text-shadow: 0 0 10px var(--accent-gold); margin-bottom: 2rem; }
+.login-container { width: 100%; }
+.team-code-input { width: 80%; padding: 15px; margin-bottom: 1rem; border-radius: 8px; border: 2px solid var(--accent-gold); background-color: var(--text-primary); color: var(--background-dark); font-size: 1.2rem; text-align: center; font-weight: 500; text-transform: uppercase; }
+.team-code-input::placeholder { color: #999; }
+.login-button { background: linear-gradient(145deg, #a04ca0, #600060); color: white; border: none; padding: 15px 30px; border-radius: 8px; font-size: 1.2rem; width: calc(80% + 34px); box-shadow: 0 4px 10px rgba(0,0,0,0.3); border-bottom: 3px solid #4d004d; }
+.login-button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.4); }
+.admin-button { background: none; border: 2px solid var(--accent-gold); color: var(--accent-gold); padding: 10px 20px; border-radius: 8px; margin-top: 1.5rem; }
+.admin-button:hover { background-color: var(--accent-gold); color: var(--background-dark); }
 
-.main-title {
-    font-family: var(--font-title);
-    font-size: 3rem;
-    color: var(--text-primary);
-    text-shadow: 0 0 10px var(--accent-gold);
-}
+/* --- SELFIE SCREEN --- */
+.selfie-screen h2 { font-family: var(--font-title); }
+.status-message { color: var(--accent-gold); margin-bottom: 1.5rem; min-height: 40px; font-size: 1.1rem; }
+.webcam-container { position: relative; margin: auto; width: 90%; max-width: 350px; border-radius: 10px; overflow: hidden; border: 3px solid var(--accent-dark-brown); }
+.webcam-container img, .webcam-container video { display: block; width: 100%; }
+.selfie-controls { margin-top: 1.5rem; display: flex; justify-content: center; gap: 1rem; }
+.capture-button { display: flex; align-items: center; gap: 0.5rem; padding: 12px 24px; font-size: 1.1rem; background-color: var(--button-purple); color: white; border: none; border-radius: 8px; }
+.retake-button { background: none; border: 2px solid var(--accent-gold); color: var(--accent-gold); }
+.waiting-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; }
 
-.login-container {
-    width: 100%;
-}
+/* --- SPINNER --- */
+.spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3); border-top-color: var(--accent-gold); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.team-code-input {
-    width: 80%;
-    padding: 15px;
-    margin-bottom: 1rem;
-    border-radius: 8px;
-    border: 2px solid var(--accent-gold);
-    background-color: var(--text-primary);
-    color: var(--background-dark);
-    font-size: 1.2rem;
-    text-align: center;
-    font-weight: 500;
-    text-transform: uppercase;
-}
+/* --- GAME SCREEN (RIDDLES) --- */
+.game-title { font-family: var(--font-title); }
+.tabs { display: flex; margin-bottom: 1rem; border-bottom: 1px solid var(--accent-dark-brown); }
+.tabs button { background: none; border: none; color: var(--text-primary); flex: 1; padding: 1rem; font-size: 1rem; border-bottom: 3px solid transparent; }
+.tabs button.active { border-bottom-color: var(--accent-gold); font-weight: bold; }
+.riddle-card { background-color: rgba(0,0,0,0.2); border: 1px solid var(--accent-dark-brown); color: white; padding: 1.5rem; border-radius: 10px; min-height: 100px; }
+.past-riddles ul { list-style: none; padding: 0; text-align: left; }
+.past-riddles li { margin-bottom: 1rem; border-left: 3px solid var(--accent-gold); padding-left: 1rem; }
+.scan-button { width: 100%; padding: 20px; font-size: 1.5rem; margin-top: 1.5rem; background-color: var(--button-purple); color: white; border: none; border-radius: 8px; display: flex; justify-content: center; align-items: center; gap: 1rem; }
 
-.team-code-input::placeholder {
-    color: #999;
-}
+/* --- SCANNER VIEW --- */
+.scanner-container { padding: 1rem; }
+.scanner-viewport { position: relative; width: 100%; max-width: 400px; margin: auto; border: 3px solid var(--accent-gold); border-radius: 10px; overflow: hidden; }
+.scanner-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.scanner-line { position: absolute; left: 0; top: 0; width: 100%; height: 3px; background: linear-gradient(90deg, transparent, rgba(255,0,0,0.8), transparent); animation: scan 3s infinite linear; }
+@keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
+.cancel-scan-button { margin-top: 1rem; background: none; color: var(--accent-gold); border: 2px solid var(--accent-gold); }
 
-/* --- BUTTON STYLES --- */
-button {
-    font-family: var(--font-body);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-}
+/* --- COMPLETION SCREEN --- */
+.completion-screen { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+.completion-screen h2 { font-family: var(--font-title); }
+.final-time-card { background: var(--accent-gold); color: var(--background-dark); padding: 1rem 2rem; border-radius: 10px; }
+.final-time-card h3 { margin: 0; font-size: 1.2rem; }
+.final-time-card p { margin: 0; font-size: 2rem; font-weight: bold; }
 
-.login-button {
-    background: linear-gradient(145deg, #a04ca0, #600060);
-    color: white;
-    border: none;
-    padding: 15px 30px;
-    border-radius: 8px;
-    font-size: 1.2rem;
-    width: calc(80% + 34px); /* Match input width */
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    border-bottom: 3px solid #4d004d;
-}
-
-.login-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(0,0,0,0.4);
-}
-
-.admin-button {
-    background: none;
-    border: 2px solid var(--accent-gold);
-    color: var(--accent-gold);
-    padding: 10px 20px;
-    border-radius: 8px;
-    margin-top: 1.5rem;
-}
-
-.admin-button:hover {
-    background-color: var(--accent-gold);
-    color: var(--background-dark);
-}
-
-/* --- STYLES FOR ADMIN VERIFICATION MODAL (NEW) --- */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    padding: 1rem;
-    box-sizing: border-box;
-}
-
-.modal-content {
-    background-color: #2c1a2b; /* Dark background from theme */
-    padding: 2rem;
-    border-radius: 15px;
-    width: 90%;
-    max-width: 500px;
-    position: relative;
-    border: 2px solid var(--accent-gold);
-    text-align: center;
-}
-
-.modal-close {
-    position: absolute;
-    top: 10px;
-    right: 15px;
-    background: none;
-    border: none;
-    font-size: 2rem;
-    color: var(--text-primary);
-    cursor: pointer;
-}
-
-.notification-button {
-    background-color: #ff9800; /* A bright, attention-grabbing color */
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7);
-    }
-    70% {
-        box-shadow: 0 0 0 10px rgba(255, 152, 0, 0);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(255, 152, 0, 0);
-    }
-}
+/* --- ADMIN MODAL & NOTIFICATION --- */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 1rem; box-sizing: border-box; }
+.modal-content { background-color: var(--background-dark); padding: 2rem; border-radius: 15px; width: 90%; max-width: 500px; position: relative; border: 2px solid var(--accent-gold); text-align: center; }
+.modal-close { position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 2rem; color: var(--text-primary); cursor: pointer; }
+.notification-button { background-color: #ff9800; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); } }
 
