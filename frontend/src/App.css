@@ -12,11 +12,11 @@
     --background-dark: #1a1110;
 }
 
-/* --- CORRECTED: Full-screen background image --- */
+/* --- CORRECTED: Full-screen background image from local file --- */
 body {
-    /* Reverted to a stable direct link for reliability */
-    background-image: url('https://i.imgur.com/gS3hLgK.jpeg');
-    /* Added a dark fallback color that matches the theme */
+    /* This now points to the image file in your /public folder. */
+    background-image: url('/background.jpg');
+    /* Added a dark fallback color that matches the theme, just in case. */
     background-color: var(--background-dark);
     background-size: cover; /* Ensures the image covers the entire screen */
     background-position: center; /* Centers the image */
@@ -32,11 +32,10 @@ body {
     box-sizing: border-box;
 }
 
-/* --- UPDATED: Translucent parchment effect --- */
+/* --- Translucent parchment effect --- */
 .app-container {
     width: 100%;
     max-width: 500px;
-    /* This creates the translucent effect. It's the parchment color with 85% opacity. */
     background-color: rgba(245, 232, 200, 0.85); 
     border: 5px solid var(--border-color);
     border-radius: 5px;
@@ -44,9 +43,8 @@ body {
     padding: 2rem;
     text-align: center;
     color: var(--text-on-parchment);
-    /* This blurs the background image behind the container for a frosted glass effect */
     backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px); /* For Safari compatibility */
+    -webkit-backdrop-filter: blur(4px);
 }
 
 /* --- FADE-IN ANIMATION --- */
@@ -74,14 +72,14 @@ body {
     border: 2px solid var(--border-color);
     font-size: 1.2rem;
     text-align: center;
-    background-color: rgba(255, 249, 240, 0.8); /* Slightly translucent input */
+    background-color: rgba(255, 249, 240, 0.8);
     font-family: var(--font-body);
     font-weight: 500;
     color: var(--text-on-parchment);
     text-transform: uppercase;
 }
 
-/* --- BUTTON STYLES (No changes needed) --- */
+/* --- BUTTON STYLES --- */
 button {
     font-family: var(--font-title);
     background-color: var(--dark-brown);
@@ -110,13 +108,13 @@ button:hover {
     color: var(--parchment-bg-solid);
 }
 
-/* --- GAMEPLAY & ADMIN STYLES (No changes needed) --- */
+/* --- GAMEPLAY & ADMIN STYLES --- */
 .webcam-container { border: 3px solid var(--border-color); border-radius: 5px; overflow: hidden; margin: 1rem auto; width: 90%; max-width: 350px;}
 .tabs { display: flex; margin-bottom: 1rem; border-bottom: 2px solid var(--border-color); }
 .tabs button { color: var(--text-on-parchment); background: none; border: none; flex: 1; padding: 1rem; font-size: 1rem; border-bottom: 3px solid transparent; }
 .tabs button.active { border-bottom-color: var(--dark-brown); font-family: var(--font-title); }
 .riddle-card {
-    background-color: rgba(255, 249, 240, 0.7); /* Slightly translucent riddle card */
+    background-color: rgba(255, 249, 240, 0.7);
     border: 1px solid var(--border-color);
     color: var(--text-on-parchment);
     padding: 1.5rem;
