@@ -12,15 +12,13 @@
     --background-dark: #1a1110;
 }
 
-/* --- CORRECTED: Full-screen background image from local file --- */
+/* --- UPDATED: Solid Color Background --- */
 body {
-    /* This now points to the image file in your /public folder. */
-    background-image: url('/background.jpg');
-    /* Added a dark fallback color that matches the theme, just in case. */
+    /* The background-image has been removed. */
     background-color: var(--background-dark);
-    background-size: cover; /* Ensures the image covers the entire screen */
-    background-position: center; /* Centers the image */
-    background-attachment: fixed; /* Prevents the image from scrolling with the content */
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
     color: var(--parchment-bg-solid);
     font-family: var(--font-body);
     margin: 0;
@@ -43,8 +41,7 @@ body {
     padding: 2rem;
     text-align: center;
     color: var(--text-on-parchment);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    /* The backdrop filter is removed as it has no effect on a solid color */
 }
 
 /* --- FADE-IN ANIMATION --- */
